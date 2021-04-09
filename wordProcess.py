@@ -197,10 +197,10 @@ def get_comment_location(xml_file, green_list):
                 for comment2 in res2:
                     comment2 = list(comment2)[1]
                     location_str += comment2
-    print(location_str)
+    # print(location_str)
     info.append("标注所在位置为：" + location_str)
     green = list(set(green_list))
-    print("green", green)
+    # print("green", green)
     # for green in green_list:
 
     # 判断第二次出现时是否有批注
@@ -236,7 +236,10 @@ def parse_green(green_list):
         if len(line) != 0:
             # 【】在每个地方只能出现偶数次
             cnt = line.count("【") + line.count("】")
-            if cnt % 2 != 0:
+            if cnt == 0:
+                no_error = False
+                err.append('序号错误: "' + line + '"不是序号')
+            elif cnt % 2 != 0:
                 no_error = False
                 err.append('序号错误: "' + line + '"标注不完整')
             else:
@@ -409,9 +412,13 @@ def str_count(artical):
 
 
 def change_file_name(filename, cnt):
-    print(filename)
+    # print(filename)
     prefix = filename.split(".docx")[0]
-    os.rename(filename, prefix + "-" + str(cnt) + ".docx")
+    name_no_num = prefix.split("-")[0]
+    try:
+        os.rename(filename, name_no_num + "-" + str(cnt) + ".docx")
+    except:
+        err.append("改名错误：该文件正在使用中，无法修改")
 
 
 def parse_file(filename):
@@ -432,10 +439,12 @@ def parse_file(filename):
         artical = read_file(filename)
         # print(artical)
         cnt_result = str_count(artical)
-        print(cnt_result)
+        # print(cnt_result)
     if comments_path != "notexist":
         comment = get_comment(comments_path)
         parse_comment(comment)
+    change_file_name(filename, cnt_result)
+    return err, info
 
 # parse_file("./sample.docx")
 # change_file_name("zishu.docx", 123)
