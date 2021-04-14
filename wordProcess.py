@@ -5,12 +5,7 @@ import re
 import string
 import xml.etree.ElementTree as ET
 import zipfile
-
 from bs4 import BeautifulSoup
-from docx import Document
-from docx.enum.text import WD_COLOR_INDEX
-from docx.shared import RGBColor
-from lxml import etree
 
 info = []
 err = []
@@ -20,23 +15,24 @@ namespace = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 def unzip_file(filename):
     global err
     global info
+    # print("unzip", filename)
     r = zipfile.is_zipfile(filename)
+    dir_path, file_path = os.path.split(filename)
     exist_comments = False
     if r:
         fz = zipfile.ZipFile(filename, "r")
         for file in fz.namelist():
             if file == "word/document.xml":
-                fz.extract(file, "./doctmp")
+                fz.extract(file, dir_path + "./doctmp")
             if file == "word/comments.xml":
                 exist_comments = True
-                fz.extract(file, "./doctmp")
+                fz.extract(file, dir_path + "./doctmp")
     else:
         err.append("解压错误：该文件无法解压，请使用.docx后缀的文件")
         return "error", "error"
-    dir_path, file_path = os.path.split(filename)
-    document_path = os.path.join(dir_path, "doctmp/word/document.xml")
+    document_path = dir_path + "/doctmp/word/document.xml"
     if exist_comments:
-        comments_path = os.path.join(dir_path, "doctmp/word/comments.xml")
+        comments_path = dir_path + "/doctmp/word/comments.xml"
     else:
         comments_path = "notexist"
     return document_path, comments_path
@@ -84,15 +80,15 @@ def get_color(xml_file):
     red_content = ""
     yellow_content = ""
     green_content = ""
-    err_content = ""
+    highlight_err_content = ""
     err_content_2 = ""
     id = 1
     for para in document.findall(namespace + "p"):
         red_content = ""
         yellow_content = ""
         green_content = ""
-        err_content = ""
-        err_content_2 = ""
+        highlight_err_content = ""
+        font_err_content = ""
         for r in para.findall(namespace + "r"):
             # print(r.tag, r.attrib, r.text)
             rpr = r[0]
@@ -120,22 +116,27 @@ def get_color(xml_file):
                 else:
                     # 标错颜色了
                     for t in r.findall(namespace + "t"):
-                        err_content += t.text
-                    err.append("格式错误: 第" + str(id) + '段"' + err_content + '"高亮颜色不符合要求！')
+                        highlight_err_content += t.text
+
             if color == "FF0000":
                 # 是红色，则提取所有字
                 for t in r.findall(namespace + "t"):
                     # print(t.text)
                     red_content += t.text
-            elif color == "auto":
+            elif color == "auto" or color == "000000":
                 # 是黑色，不管
                 pass
             else:
                 # 是其他颜色，提醒
+                # print(color)
                 for t in r.findall(namespace + "t"):
-                    err_content_2 += t.text
-                err.append("格式错误: 第" + str(id) + '段"' + err_content_2 + '"字体颜色不符合要求！')
+                    # print(t.text)
+                    font_err_content += t.text
 
+        if len(highlight_err_content) != 0:
+            err.append("高亮颜色错误: " + highlight_err_content + '"高亮颜色不符合要求！')
+        if len(font_err_content) != 0:
+            err.append("字体颜色错误: " + font_err_content + '"字体颜色不符合要求！')
         red_list.append(red_content)
         yellow_list.append(yellow_content)
         green_list.append(green_content)
@@ -156,7 +157,7 @@ def parse_red(red_list):
             if cnt > 3:
                 # 过于冗长
                 no_error = False
-                print(line)
+                # print(line)
                 err.append("标注错误: 第" + str(id) + "段重点部分过长，请勿超过三句话。定位：" + line[0:3])
         else:
             # 会议纪要最后未以。结尾
@@ -230,7 +231,7 @@ def parse_green(green_list):
     # print(green_list)
     no_error = True
     full_str = ""
-    Stack = []
+    stack = []
     source = []
     for line in green_list:
         if len(line) != 0:
@@ -249,26 +250,25 @@ def parse_green(green_list):
                 a = [i + "】" for i in a]
                 source += a
 
-    # print("souces", source)
+    # print("sources", source)
     for item in source:
-        if len(Stack) == 0:
-            Stack.append(item)
-        elif item != Stack[-1]:
-            Stack.append(item)
+        if len(stack) == 0:
+            stack.append(item)
+        elif item != stack[-1]:
+            stack.append(item)
         else:
-            Stack.pop()
-    if len(Stack) == 0:
+            stack.pop()
+    if len(stack) == 0:
         return 0
     else:
         # 找到孤立的那个数
         orphan = ""
-        for item in Stack:
-            cnt = Stack.count(item)
+        for item in stack:
+            cnt = stack.count(item)
             if cnt == 1:
-                orphan = item
-                break
+                orphan += item
         no_error = False
-        err.append('序号错误: 存在孤立序号: "' + orphan + '"，请检查')
+        err.append('序号错误: 存在孤立序号: \"' + orphan + '\"未被绿色高亮，请检查')
 
     # print(full_str)
     # for str in full_str:
@@ -279,38 +279,46 @@ def parse_green(green_list):
 def parse_yellow(yellow_list):
     global err
     global info
-    # print(yellow_list)
-    id = 1
+    print(yellow_list)
+    idx = 1
     for line in yellow_list:
         if len(line) != 0:
             # print(line)
-            if "。" in line or "？" in line or "！" in line:
-                err.append("标注错误: 黄色只能标注短语或词语，第" + str(id) + '段中"' + line[0:5] + '……"一句被标注。')
-        id += 1
+            if "。" in line:  # or "？" in line or "！" in line:
+                full = line.index("。")
+                # print(line.index("。"))
+                err.append("标注错误: 黄色只能标注短语或词语，\"" + line[full - 3:full] + '。\"处"。"被标注。')
+            elif "？" in line:
+                question = line.index("？")
+                err.append("标注错误: 黄色只能标注短语或词语，\"" + line[question - 3:question] + '？\"处"？"被标注。')
+            elif "！" in line:
+                exclamatory = line.index("！")
+                err.append("标注错误: 黄色只能标注短语或词语，\"" + line[exclamatory - 3:exclamatory] + '！\"处"！"被标注。')
+        idx += 1
 
 
 # 对内容列表处理,已完成
-def parse_comment(content_list):
+def parse_comment(content_list, filename):
     global err
     global info
-    id = 1
+    idx = 1
     no_error = True
     for comment in content_list:
         if comment.find("小标题：") == -1:
             # 没有小标题
             no_error = False
-            err.append("批注错误: 第" + str(id) + "个批注没有'小标题：'或不完整。")
+            err.append("批注错误: 第" + str(idx) + "个批注没有'小标题：'或不完整，注意：使用中文字符")
         elif comment.find("会议纪要：") == -1:
             # 没有会议纪要
             no_error = False
-            err.append("批注错误: 第" + str(id) + "个批注没有'会议纪要：'或不完整。")
+            err.append("批注错误: 第" + str(idx) + "个批注没有'会议纪要：'或不完整，注意：使用中文字符")
         else:
             info = comment.split("会议纪要：")
             # print(info)
             if len(info[1]) < 5:
                 # 太短了
                 no_error = False
-                err.append("批注错误: 第" + str(id) + "个批注长度过短")
+                err.append("批注错误: 第" + str(idx) + "个批注长度过短")
             # 会议纪要最后未以。结尾
             if info[1].endswith("。"):
                 # 查找句子结束标志
@@ -319,7 +327,7 @@ def parse_comment(content_list):
                 if cnt > 3:
                     # 过于冗长
                     no_error = False
-                    err.append("批注错误: 第" + str(id) + "个批注会议纪要过长，请勿超过三句话。")
+                    err.append("批注错误: 第" + str(idx) + "个批注会议纪要过长，请勿超过三句话。")
             else:
                 # 会议纪要最后未以。结尾
                 cnt = info[1].count("。") + info[1].count("！") + info[1].count("？") + 1
@@ -327,11 +335,17 @@ def parse_comment(content_list):
                 if cnt > 3:
                     # 过于冗长
                     no_error = False
-                    err.append("批注错误: 第" + str(id) + "个批注会议纪要过长，请勿超过三句话。")
-        id += 1
+                    err.append("批注错误: 第" + str(idx) + "个批注会议纪要过长，请勿超过三句话。")
+        idx += 1
     #  未出错，写入txt
     if no_error:
-        f = open("批注.txt", "w")
+        dir_path, file_path = os.path.split(filename)
+        # print(filename)
+        txtname = filename.split("/")[-1].split(".")[0]
+        # print("批注文件", filename)
+        # print("dir", dir_path)
+        # print("txtname", txtname)
+        f = open(dir_path + "/批注信息_" + txtname + ".txt", "w", encoding='utf-8')
         for line in content_list:
             title, brif = line.split("会议纪要")
             brif = "会议纪要" + brif
@@ -341,14 +355,18 @@ def parse_comment(content_list):
 
 
 def neighborhood(iterable):
-    iterator = iter(iterable)
-    prev_item = " "
-    current_item = next(iterator)  # throws StopIteration if empty.
-    for next_item in iterator:
-        yield (prev_item, current_item, next_item)
-        prev_item = current_item
-        current_item = next_item
-    yield (prev_item, current_item, None)
+    try:
+        iterator = iter(iterable)
+        prev_item = " "
+        current_item = next(iterator)
+        # throws StopIteration if empty.
+        for next_item in iterator:
+            yield prev_item, current_item, next_item
+            prev_item = current_item
+            current_item = next_item
+        yield prev_item, current_item, None
+    except StopIteration:
+        pass
 
 
 def str_count(artical):
@@ -389,6 +407,9 @@ def str_count(artical):
         # 统计中文
         elif item.isalpha():
             count_zh += 1
+        # 最特殊的一种，在=======<B>这种情况下可以计数
+        elif item == '<' and prev == '=':
+            count_pu += 1
         # 统计英文标点
         elif item in en_pu:
             if prev.isdigit():
@@ -411,12 +432,52 @@ def str_count(artical):
     return total_num
 
 
+def complete_count(xml_file):
+    f = open(xml_file, encoding="utf-8")
+    xml_str = ""
+    while True:
+        line = f.readline()
+        xml_str += line
+        if not line:
+            break
+    # print(xml_str)
+    # 正则表达式，有两种情况。如果有一部分文字被标上注释了，就会触发后一种
+    pattern = r"(<w:t>)([\s\S]*?)(</w:t>)|(<w:t xml:space=\"preserve\">)([\s\S]*?)(</w:t>)"
+    para_list = xml_str.split(":tab/>")
+    para_content_list = []
+    # print(para_list)
+    for para in para_list:
+        para_content = ''
+        res = re.findall(pattern, para)
+        if res:
+            for text in res:
+                # 获取起始位置
+                text = list(text)
+                start = 0
+                if "<w:t>" in text:
+                    start = text.index("<w:t>")
+                elif "<w:t xml:space=\"preserve\">" in text:
+                    start = text.index("<w:t xml:space=\"preserve\">")
+
+                content = text[start + 1]
+                # print(content)
+                para_content += content
+                para_content = para_content.replace("&lt;", "<").replace("&gt;", ">")
+
+        para_content_list.append(para_content)
+    total_cnt = 0
+    for para_content in para_content_list:
+        total_cnt += str_count(para_content)
+    print(total_cnt)
+    return total_cnt
+
+
 def change_file_name(filename, cnt):
     # print(filename)
     prefix = filename.split(".docx")[0]
-    name_no_num = prefix.split("-")[0]
+    name_no_num = prefix.split("_字数")[0]
     try:
-        os.rename(filename, name_no_num + "-" + str(cnt) + ".docx")
+        os.rename(filename, name_no_num + "_字数" + str(cnt) + ".docx")
     except:
         err.append("改名错误：该文件正在使用中，无法修改")
 
@@ -436,13 +497,11 @@ def parse_file(filename):
         # parse_red(red)
         parse_green(green)
         parse_yellow(yellow)
-        artical = read_file(filename)
-        # print(artical)
-        cnt_result = str_count(artical)
+        cnt_result = complete_count(document_path)
         # print(cnt_result)
     if comments_path != "notexist":
         comment = get_comment(comments_path)
-        parse_comment(comment)
+        parse_comment(comment, filename)
     change_file_name(filename, cnt_result)
     return err, info
 
