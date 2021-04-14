@@ -279,7 +279,7 @@ def parse_green(green_list):
 def parse_yellow(yellow_list):
     global err
     global info
-    print(yellow_list)
+    # print(yellow_list)
     idx = 1
     for line in yellow_list:
         if len(line) != 0:
@@ -468,7 +468,7 @@ def complete_count(xml_file):
     total_cnt = 0
     for para_content in para_content_list:
         total_cnt += str_count(para_content)
-    print(total_cnt)
+    # print(total_cnt)
     return total_cnt
 
 
@@ -503,7 +503,7 @@ def parse_file(filename):
         comment = get_comment(comments_path)
         parse_comment(comment, filename)
     change_file_name(filename, cnt_result)
-    return err, info
+    return err, info, cnt_result
 
 # parse_file("./sample.docx")
 # change_file_name("zishu.docx", 123)
