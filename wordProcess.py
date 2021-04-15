@@ -198,9 +198,26 @@ def get_comment_location(xml_file, green_list):
                 for comment2 in res2:
                     comment2 = list(comment2)[1]
                     location_str += comment2
+    if len(location_str) != 0:
+        err.append("标注错误：存在范围标注 \"" + location_str + '\", 请修改！')
+
+    # print("location", location_str)
     # print(location_str)
-    info.append("标注所在位置为：" + location_str)
+    # # 以下为判断范围标注的序号
+    # location_str_list = location_str.split("【")
+    # # print(location_str_list)
+    # new_location_list = []
+    # for lo in location_str_list:
+    #     if len(lo) != 0:
+    #         lo = '【' + lo
+    #         new_location_list.append(lo)
+    # print(new_location_list)
+
+    # info.append("标注所在位置为：" + location_str)
     green = list(set(green_list))
+    # print("green", green)
+    f.close()
+    # return new_location_list
     # print("green", green)
     # for green in green_list:
 
@@ -341,16 +358,21 @@ def parse_comment(content_list, filename):
     if no_error:
         dir_path, file_path = os.path.split(filename)
         # print(filename)
-        txtname = filename.split("/")[-1].split(".")[0]
+        txt_name = filename.split("/")[-1].split(".")[0]
         # print("批注文件", filename)
         # print("dir", dir_path)
         # print("txtname", txtname)
-        f = open(dir_path + "/批注信息_" + txtname + ".txt", "w", encoding='utf-8')
+        f = open(dir_path + "/批注信息_" + txt_name + ".txt", "w", encoding='utf-8')
+        i = 0
+        # print(location_list, len(location_list))
+        # print(content_list, len(content_list))
         for line in content_list:
-            title, brif = line.split("会议纪要")
-            brif = "会议纪要" + brif
+            title, brief = line.split("会议纪要")
+            brief = "会议纪要" + brief
+            # f.write(location_list[i] + '\n')
             f.write(title + "\n")
-            f.write(brif + "\n\n")
+            f.write(brief + "\n\n")
+            i += 1
         f.close()
 
 
@@ -469,6 +491,7 @@ def complete_count(xml_file):
     for para_content in para_content_list:
         total_cnt += str_count(para_content)
     # print(total_cnt)
+    f.close()
     return total_cnt
 
 
@@ -493,13 +516,13 @@ def parse_file(filename):
     else:
         # print(document_path)
         red, yellow, green = get_color(document_path)
-        get_comment_location(document_path, green)
         # parse_red(red)
         parse_green(green)
         parse_yellow(yellow)
         cnt_result = complete_count(document_path)
         # print(cnt_result)
     if comments_path != "notexist":
+        get_comment_location(document_path, green)
         comment = get_comment(comments_path)
         parse_comment(comment, filename)
     change_file_name(filename, cnt_result)
