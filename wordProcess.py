@@ -3,7 +3,7 @@
 import os
 import re
 import string
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as Etree
 import zipfile
 from bs4 import BeautifulSoup
 
@@ -40,20 +40,20 @@ def unzip_file(filename):
 
 # 解压文件，返回纯文字部分
 def read_file(filename):
-    artical = ""
+    article = ""
     document = zipfile.ZipFile(filename)
     xml = document.read("word/document.xml")
-    wordObj = BeautifulSoup(xml.decode("utf-8"), features="html.parser")
-    texts = wordObj.findAll("w:t")
+    word_obj = BeautifulSoup(xml.decode("utf-8"), features="html.parser")
+    texts = word_obj.findAll("w:t")
     # print(texts)
     for text in texts:
-        artical = artical + text.string
-    return artical
+        article = article + text.string
+    return article
 
 
 # 从xml中解析得到评论的内容列表
 def get_comment(filename):
-    tree = ET.parse(filename)
+    tree = Etree.parse(filename)
     root = tree.getroot()
     content_list = []
     for comment in root:
@@ -71,21 +71,15 @@ def get_comment(filename):
 def get_color(xml_file):
     global err
     global info
-    tree = ET.parse(xml_file)
+    tree = Etree.parse(xml_file)
     root = tree.getroot()
     document = root[0]
     red_list = []
     yellow_list = []
     green_list = []
-    red_content = ""
-    yellow_content = ""
-    green_content = ""
-    highlight_err_content = ""
-    err_content_2 = ""
-    id = 1
+    index = 1
     for para in document.findall(namespace + "p"):
         red_content = ""
-        yellow_content = ""
         green_content = ""
         highlight_err_content = ""
         font_err_content = ""
@@ -140,15 +134,14 @@ def get_color(xml_file):
             err.append("字体颜色错误：" + font_err_content + '"字体颜色不符合要求！')
         red_list.append(red_content)
         green_list.append(green_content)
-        id += 1
+        index += 1
     return red_list, yellow_list, green_list
 
 
 def parse_red(red_list):
     global err
     global info
-    no_error = True
-    id = 1
+    index = 1
     for line in red_list:
         # print(line)
         if line.endswith("。") or line.endswith("！") or line.endswith("？"):
@@ -156,18 +149,16 @@ def parse_red(red_list):
             cnt = line.count("。") + line.count("！") + line.count("？")
             if cnt > 3:
                 # 过于冗长
-                no_error = False
                 # print(line)
-                err.append("标注错误：第" + str(id) + "段重点部分过长，请勿超过三句话。定位：" + line[0:3])
+                err.append("标注错误：第" + str(index) + "段重点部分过长，请勿超过三句话。定位：" + line[0:3])
         else:
             # 会议纪要最后未以。结尾
             cnt = line.count("。") + line.count("！") + line.count("？") + 1
             # print(cnt)
             if cnt > 3:
                 # 过于冗长
-                no_error = False
-                err.append("标注错误：第" + str(id) + "段重点部分过长，请勿超过三句话。定位：" + line[0:3])
-        id += 1
+                err.append("标注错误：第" + str(index) + "段重点部分过长，请勿超过三句话。定位：" + line[0:3])
+        index += 1
 
 
 # 获得评论位置里的内容
@@ -183,7 +174,7 @@ def get_comment_location(xml_file):
             break
     # 查找所有范围标注
     total_range_comment_list = []
-    range_pattern = "(commentRangeStart)([\s\S]*?)(commentRangeEnd)"
+    range_pattern = r"(commentRangeStart)([\s\S]*?)(commentRangeEnd)"
     range_res = re.findall(range_pattern, xml_str)
     comment_range_start_num = len(range_res)
     # 以下为之前的，查找到范围标注就报错的代码
@@ -192,7 +183,7 @@ def get_comment_location(xml_file):
         # print(comment)
         # print(type(comment))
         for tmp in comment:
-            comment_pattern = "(<w:t>)([\s\S]*?)(</w:t>)"
+            comment_pattern = r"(<w:t>)([\s\S]*?)(</w:t>)"
             res2 = re.findall(comment_pattern, tmp)
             if res2:
                 one_para_comment = ""
@@ -200,7 +191,7 @@ def get_comment_location(xml_file):
                     comment2 = list(comment2)[1]
                     # print(comment2)
                     one_para_comment += comment2
-                print(one_para_comment)
+                # print(one_para_comment)
                 total_range_comment_list.append(one_para_comment)
     # 查看有没有非范围标注的标注
     single_pattern = "(commentReference)"
@@ -217,7 +208,7 @@ def get_comment_location(xml_file):
     # 检查范围批注格式是否正确，格式要求为【x.x】
     list_flag = True
     for range_comment in total_range_comment_list:
-        num_pattern = "【\d+.\d+】|【\d+】"
+        num_pattern = r"【\d+.\d+】|【\d+】"
         match_res = re.match(num_pattern, range_comment)
         if not match_res:
             list_flag = False
@@ -271,21 +262,16 @@ def get_comment_location(xml_file):
 def parse_green(green_list, range_comment_list):
     global err
     global info
-    print(green_list)
-    print(range_comment_list)
-    no_error = True
-    full_str = ""
-    stack = []
+    # print(green_list)
+    # print(range_comment_list)
     slice_result = []
     for line in green_list:
         if len(line) != 0:
             # 【】在每个地方只能出现偶数次
             cnt = line.count("【") + line.count("】")
             if cnt == 0:
-                no_error = False
                 err.append('序号错误："' + line + '"不是序号，请使用<x.x>格式标注')
             elif cnt % 2 != 0:
-                no_error = False
                 err.append('序号错误："' + line + '"标注不完整')
             else:
                 # 分割长度为4的
@@ -300,7 +286,7 @@ def parse_green(green_list, range_comment_list):
     for item in unique_slice_result:
         # 对于每一项，都应该有范围批注
         # 首先检查格式对不对
-        green_pattern = "【\d+.\d+】|【\d+】|【\d+】【\d+.\d+】"
+        green_pattern = r"【\d+.\d+】|【\d+】|【\d+】【\d+.\d+】"
         match_res = re.match(green_pattern, item)
         if not match_res:
             err.append("序号错误：绿色高亮序号：\"" + item + "\"不符合格式，请检查！")
@@ -418,10 +404,10 @@ def neighborhood(iterable):
 
 def str_count(article):
     count_en = count_dg = count_sp = count_zh = count_pu = count_dg_num = count_en_num = 0  # 统一将0赋值给这5个变量
-    s_len = len(article)
-    ch_pu = "，。！？【】（）"
+    # s_len = len(article)
+    # ch_pu = "，。！？【】（）"
     en_pu = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"
-    for prev, item, next in neighborhood(article):
+    for prev, item, follow in neighborhood(article):
         # 统计英文
         if item in string.ascii_letters:
             count_en += 1
@@ -526,7 +512,7 @@ def change_file_name(filename, cnt):
     name_no_num = prefix.split("_字数")[0]
     try:
         os.rename(filename, name_no_num + "_字数" + str(cnt) + ".docx")
-    except:
+    except PermissionError:
         err.append("改名错误：该文件正在使用中，无法修改")
 
 
