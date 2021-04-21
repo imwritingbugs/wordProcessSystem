@@ -119,7 +119,7 @@ def get_color(xml_file):
                     for t in r.findall(namespace + "t"):
                         highlight_err_content += t.text
 
-            if color == "FF0000":
+            if color == "FF0000" or "ff0000":
                 # 是红色，则提取所有字
                 for t in r.findall(namespace + "t"):
                     # print(t.text)
@@ -309,7 +309,7 @@ def parse_yellow(yellow_list, red_list):
     red_str = ''
     for red_sentence in red_list:
         red_str += red_sentence
-
+    # print(red_str)
     for yellow_word in yellow_list:
         if len(yellow_word) != 0:
             # print(line)
