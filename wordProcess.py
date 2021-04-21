@@ -107,7 +107,8 @@ def get_color(xml_file):
                 # print(highlight)
                 if highlight == "yellow":
                     for t in r.findall(namespace + "t"):
-                        yellow_content += t.text
+                        # print(t.text)
+                        yellow_list.append(t.text)
                 elif highlight == "green":
                     for t in r.findall(namespace + "t"):
                         green_content += t.text
@@ -138,7 +139,6 @@ def get_color(xml_file):
         if len(font_err_content) != 0:
             err.append("字体颜色错误: " + font_err_content + '"字体颜色不符合要求！')
         red_list.append(red_content)
-        yellow_list.append(yellow_content)
         green_list.append(green_content)
         id += 1
     return red_list, yellow_list, green_list
@@ -181,13 +181,13 @@ def get_comment_location(xml_file, green_list):
         xml_str += line
         if not line:
             break
-    # print(xml_str)
-    # 正则表达式
-    pattern = "(commentRangeStart)([\s\S]*?)(commentRangeEnd)"
-    res = re.findall(pattern, xml_str)
-    location_str = ""
-    # print(res)
-    for comment in res:
+    # 查找所有范围标注
+    range_location_str = ''
+    range_pattern = "(commentRangeStart)([\s\S]*?)(commentRangeEnd)"
+    range_res = re.findall(range_pattern, xml_str)
+    comment_range_start_num = len(range_res)
+    # 以下为之前的，查找到范围标注就报错的代码
+    for comment in range_res:
         comment = list(comment)
         # print(comment)
         # print(type(comment))
@@ -197,10 +197,18 @@ def get_comment_location(xml_file, green_list):
             if res2:
                 for comment2 in res2:
                     comment2 = list(comment2)[1]
-                    location_str += comment2
-    if len(location_str) != 0:
-        err.append("标注错误：存在范围标注 \"" + location_str + '\", 请修改！')
+                    range_location_str += comment2
+    # 查看有没有非范围标注的标注
+    single_pattern = "(commentReference)"
+    single_res = re.findall(single_pattern, xml_str)
+    comment_reference_num = len(single_res)
 
+    # print(comment_range_start_num, comment_reference_num)
+    if comment_range_start_num != comment_reference_num:
+        if len(range_location_str) != 0:
+            err.append("批注错误：存在非范围批注，请检查！范围标注有：" + range_location_str)
+        else:
+            err.append("批注错误：存在非范围批注，请检查！")
     # print("location", location_str)
     # print(location_str)
     # # 以下为判断范围标注的序号
@@ -256,7 +264,7 @@ def parse_green(green_list):
             cnt = line.count("【") + line.count("】")
             if cnt == 0:
                 no_error = False
-                err.append('序号错误: "' + line + '"不是序号')
+                err.append('序号错误: "' + line + '"不是序号，请使用<x.x>格式标注')
             elif cnt % 2 != 0:
                 no_error = False
                 err.append('序号错误: "' + line + '"标注不完整')
@@ -293,25 +301,34 @@ def parse_green(green_list):
     #     Stack.append()
 
 
-def parse_yellow(yellow_list):
+def parse_yellow(yellow_list, red_list):
+    # print(yellow_list)
     global err
     global info
     # print(yellow_list)
-    idx = 1
-    for line in yellow_list:
-        if len(line) != 0:
+    red_str = ''
+    for red_sentence in red_list:
+        red_str += red_sentence
+
+    for yellow_word in yellow_list:
+        if len(yellow_word) != 0:
             # print(line)
-            if "。" in line:  # or "？" in line or "！" in line:
-                full = line.index("。")
+            # 检查黄色是否只标注了词语或短语
+            if "。" in yellow_word:  # or "？" in line or "！" in line:
+                full = yellow_word.index("。")
                 # print(line.index("。"))
-                err.append("标注错误: 黄色只能标注短语或词语，\"" + line[full - 3:full] + '。\"处"。"被标注。')
-            elif "？" in line:
-                question = line.index("？")
-                err.append("标注错误: 黄色只能标注短语或词语，\"" + line[question - 3:question] + '？\"处"？"被标注。')
-            elif "！" in line:
-                exclamatory = line.index("！")
-                err.append("标注错误: 黄色只能标注短语或词语，\"" + line[exclamatory - 3:exclamatory] + '！\"处"！"被标注。')
-        idx += 1
+                err.append("标注错误: 黄色只能标注短语或词语，\"" + yellow_word[full - 3:full] + '。\"处"。"被标注。')
+            elif "？" in yellow_word:
+                question = yellow_word.index("？")
+                err.append("标注错误: 黄色只能标注短语或词语，\"" + yellow_word[question - 3:question] + '？\"处"？"被标注。')
+            elif "！" in yellow_word:
+                exclamatory = yellow_word.index("！")
+                err.append("标注错误: 黄色只能标注短语或词语，\"" + yellow_word[exclamatory - 3:exclamatory] + '！\"处"！"被标注。')
+            else:
+                # 检查黄色是否只标注在红色上
+                if yellow_word not in red_str:
+                    # print(yellow_word)
+                    err.append("标注错误：短语\"" + yellow_word + "\"未在红色重点上标注，请检查！")
 
 
 # 对内容列表处理,已完成
@@ -518,7 +535,7 @@ def parse_file(filename):
         red, yellow, green = get_color(document_path)
         # parse_red(red)
         parse_green(green)
-        parse_yellow(yellow)
+        parse_yellow(yellow, red)
         cnt_result = complete_count(document_path)
         # print(cnt_result)
     if comments_path != "notexist":
