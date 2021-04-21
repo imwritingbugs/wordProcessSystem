@@ -135,9 +135,9 @@ def get_color(xml_file):
                     font_err_content += t.text
 
         if len(highlight_err_content) != 0:
-            err.append("高亮颜色错误: " + highlight_err_content + '"高亮颜色不符合要求！')
+            err.append("高亮颜色错误：" + highlight_err_content + '"高亮颜色不符合要求！')
         if len(font_err_content) != 0:
-            err.append("字体颜色错误: " + font_err_content + '"字体颜色不符合要求！')
+            err.append("字体颜色错误：" + font_err_content + '"字体颜色不符合要求！')
         red_list.append(red_content)
         green_list.append(green_content)
         id += 1
@@ -158,7 +158,7 @@ def parse_red(red_list):
                 # 过于冗长
                 no_error = False
                 # print(line)
-                err.append("标注错误: 第" + str(id) + "段重点部分过长，请勿超过三句话。定位：" + line[0:3])
+                err.append("标注错误：第" + str(id) + "段重点部分过长，请勿超过三句话。定位：" + line[0:3])
         else:
             # 会议纪要最后未以。结尾
             cnt = line.count("。") + line.count("！") + line.count("？") + 1
@@ -166,12 +166,12 @@ def parse_red(red_list):
             if cnt > 3:
                 # 过于冗长
                 no_error = False
-                err.append("标注错误: 第" + str(id) + "段重点部分过长，请勿超过三句话。定位：" + line[0:3])
+                err.append("标注错误：第" + str(id) + "段重点部分过长，请勿超过三句话。定位：" + line[0:3])
         id += 1
 
 
 # 获得评论位置里的内容
-def get_comment_location(xml_file, green_list):
+def get_comment_location(xml_file):
     global err
     global info
     f = open(xml_file, encoding="utf-8")
@@ -182,7 +182,7 @@ def get_comment_location(xml_file, green_list):
         if not line:
             break
     # 查找所有范围标注
-    range_location_str = ''
+    total_range_comment_list = []
     range_pattern = "(commentRangeStart)([\s\S]*?)(commentRangeEnd)"
     range_res = re.findall(range_pattern, xml_str)
     comment_range_start_num = len(range_res)
@@ -195,9 +195,13 @@ def get_comment_location(xml_file, green_list):
             comment_pattern = "(<w:t>)([\s\S]*?)(</w:t>)"
             res2 = re.findall(comment_pattern, tmp)
             if res2:
+                one_para_comment = ""
                 for comment2 in res2:
                     comment2 = list(comment2)[1]
-                    range_location_str += comment2
+                    # print(comment2)
+                    one_para_comment += comment2
+                print(one_para_comment)
+                total_range_comment_list.append(one_para_comment)
     # 查看有没有非范围标注的标注
     single_pattern = "(commentReference)"
     single_res = re.findall(single_pattern, xml_str)
@@ -205,10 +209,19 @@ def get_comment_location(xml_file, green_list):
 
     # print(comment_range_start_num, comment_reference_num)
     if comment_range_start_num != comment_reference_num:
-        if len(range_location_str) != 0:
-            err.append("批注错误：存在非范围批注，请检查！范围标注有：" + range_location_str)
+        if len(total_range_comment_list) != 0:
+            err.append("批注错误：存在非范围批注，请检查！范围标注有：" + ','.join(total_range_comment_list))
         else:
             err.append("批注错误：存在非范围批注，请检查！")
+
+    # 检查范围批注格式是否正确，格式要求为【x.x】
+    list_flag = True
+    for range_comment in total_range_comment_list:
+        num_pattern = "【\d+.\d+】|【\d+】"
+        match_res = re.match(num_pattern, range_comment)
+        if not match_res:
+            list_flag = False
+            err.append("批注错误：范围批注\"" + range_comment + "\"不符合格式，请检查！")
     # print("location", location_str)
     # print(location_str)
     # # 以下为判断范围标注的序号
@@ -222,9 +235,14 @@ def get_comment_location(xml_file, green_list):
     # print(new_location_list)
 
     # info.append("标注所在位置为：" + location_str)
-    green = list(set(green_list))
     # print("green", green)
     f.close()
+    # 如果范围批注无误，返回完整的列表
+    if list_flag:
+        return total_range_comment_list
+    else:
+        # 否则返回空列表
+        return []
     # return new_location_list
     # print("green", green)
     # for green in green_list:
@@ -250,55 +268,45 @@ def get_comment_location(xml_file, green_list):
     # print(document.core_properties.comments)
 
 
-def parse_green(green_list):
+def parse_green(green_list, range_comment_list):
     global err
     global info
-    # print(green_list)
+    print(green_list)
+    print(range_comment_list)
     no_error = True
     full_str = ""
     stack = []
-    source = []
+    slice_result = []
     for line in green_list:
         if len(line) != 0:
             # 【】在每个地方只能出现偶数次
             cnt = line.count("【") + line.count("】")
             if cnt == 0:
                 no_error = False
-                err.append('序号错误: "' + line + '"不是序号，请使用<x.x>格式标注')
+                err.append('序号错误："' + line + '"不是序号，请使用<x.x>格式标注')
             elif cnt % 2 != 0:
                 no_error = False
-                err.append('序号错误: "' + line + '"标注不完整')
+                err.append('序号错误："' + line + '"标注不完整')
             else:
                 # 分割长度为4的
                 a = line.split("】")
                 a.pop()
                 a = [i + "】" for i in a]
-                source += a
+                slice_result += a
 
-    # print("sources", source)
-    for item in source:
-        if len(stack) == 0:
-            stack.append(item)
-        elif item != stack[-1]:
-            stack.append(item)
+    unique_slice_result = list(set(slice_result))
+    unique_slice_result.sort(key=slice_result.index)
+    # print("sources", unique_slice_result)
+    for item in unique_slice_result:
+        # 对于每一项，都应该有范围批注
+        # 首先检查格式对不对
+        green_pattern = "【\d+.\d+】|【\d+】|【\d+】【\d+.\d+】"
+        match_res = re.match(green_pattern, item)
+        if not match_res:
+            err.append("序号错误：绿色高亮序号：\"" + item + "\"不符合格式，请检查！")
         else:
-            stack.pop()
-    if len(stack) == 0:
-        return 0
-    else:
-        # 找到孤立的那个数
-        orphan = ""
-        for item in stack:
-            cnt = stack.count(item)
-            if cnt == 1:
-                orphan += item
-        no_error = False
-        err.append('序号错误: 存在孤立序号: \"' + orphan + '\"未被绿色高亮，请检查')
-
-    # print(full_str)
-    # for str in full_str:
-    #     if str = "【":
-    #     Stack.append()
+            if item not in range_comment_list:
+                err.append('序号错误：序号：\"' + item + '\"已被绿色高亮，但没有加上范围批注的对应序号，请检查！')
 
 
 def parse_yellow(yellow_list, red_list):
@@ -317,13 +325,13 @@ def parse_yellow(yellow_list, red_list):
             if "。" in yellow_word:  # or "？" in line or "！" in line:
                 full = yellow_word.index("。")
                 # print(line.index("。"))
-                err.append("标注错误: 黄色只能标注短语或词语，\"" + yellow_word[full - 3:full] + '。\"处"。"被标注。')
+                err.append("标注错误：黄色只能标注短语或词语，\"" + yellow_word[full - 3:full] + '。\"处"。"被标注。')
             elif "？" in yellow_word:
                 question = yellow_word.index("？")
-                err.append("标注错误: 黄色只能标注短语或词语，\"" + yellow_word[question - 3:question] + '？\"处"？"被标注。')
+                err.append("标注错误：黄色只能标注短语或词语，\"" + yellow_word[question - 3:question] + '？\"处"？"被标注。')
             elif "！" in yellow_word:
                 exclamatory = yellow_word.index("！")
-                err.append("标注错误: 黄色只能标注短语或词语，\"" + yellow_word[exclamatory - 3:exclamatory] + '！\"处"！"被标注。')
+                err.append("标注错误：黄色只能标注短语或词语，\"" + yellow_word[exclamatory - 3:exclamatory] + '！\"处"！"被标注。')
             else:
                 # 检查黄色是否只标注在红色上
                 if yellow_word not in red_str:
@@ -341,18 +349,18 @@ def parse_comment(content_list, filename):
         if comment.find("小标题：") == -1:
             # 没有小标题
             no_error = False
-            err.append("批注错误: 第" + str(idx) + "个批注没有'小标题：'或不完整，注意：使用中文字符")
+            err.append("批注错误：第" + str(idx) + "个批注没有'小标题：'或不完整，注意：使用中文字符")
         elif comment.find("会议纪要：") == -1:
             # 没有会议纪要
             no_error = False
-            err.append("批注错误: 第" + str(idx) + "个批注没有'会议纪要：'或不完整，注意：使用中文字符")
+            err.append("批注错误：第" + str(idx) + "个批注没有'会议纪要：'或不完整，注意：使用中文字符")
         else:
             info = comment.split("会议纪要：")
             # print(info)
             if len(info[1]) < 5:
                 # 太短了
                 no_error = False
-                err.append("批注错误: 第" + str(idx) + "个批注长度过短")
+                err.append("批注错误：第" + str(idx) + "个批注长度过短")
             # 会议纪要最后未以。结尾
             if info[1].endswith("。"):
                 # 查找句子结束标志
@@ -361,7 +369,7 @@ def parse_comment(content_list, filename):
                 if cnt > 3:
                     # 过于冗长
                     no_error = False
-                    err.append("批注错误: 第" + str(idx) + "个批注会议纪要过长，请勿超过三句话。")
+                    err.append("批注错误：第" + str(idx) + "个批注会议纪要过长，请勿超过三句话。")
             else:
                 # 会议纪要最后未以。结尾
                 cnt = info[1].count("。") + info[1].count("！") + info[1].count("？") + 1
@@ -369,7 +377,7 @@ def parse_comment(content_list, filename):
                 if cnt > 3:
                     # 过于冗长
                     no_error = False
-                    err.append("批注错误: 第" + str(idx) + "个批注会议纪要过长，请勿超过三句话。")
+                    err.append("批注错误：第" + str(idx) + "个批注会议纪要过长，请勿超过三句话。")
         idx += 1
     #  未出错，写入txt
     if no_error:
@@ -408,12 +416,12 @@ def neighborhood(iterable):
         pass
 
 
-def str_count(artical):
+def str_count(article):
     count_en = count_dg = count_sp = count_zh = count_pu = count_dg_num = count_en_num = 0  # 统一将0赋值给这5个变量
-    s_len = len(artical)
+    s_len = len(article)
     ch_pu = "，。！？【】（）"
     en_pu = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"
-    for prev, item, next in neighborhood(artical):
+    for prev, item, next in neighborhood(article):
         # 统计英文
         if item in string.ascii_letters:
             count_en += 1
@@ -527,21 +535,24 @@ def parse_file(filename):
     global info
     err = []
     info = []
+    range_comment_list = []
     document_path, comments_path = unzip_file(filename)
+    if comments_path != "notexist":
+        range_comment_list = get_comment_location(document_path)
+        comment = get_comment(comments_path)
+        parse_comment(comment, filename)
+    else:
+        err.append("该文件无批注，请检查！")
     if document_path == "error":
         return -1
     else:
         # print(document_path)
         red, yellow, green = get_color(document_path)
         # parse_red(red)
-        parse_green(green)
+        parse_green(green, range_comment_list)
         parse_yellow(yellow, red)
         cnt_result = complete_count(document_path)
         # print(cnt_result)
-    if comments_path != "notexist":
-        get_comment_location(document_path, green)
-        comment = get_comment(comments_path)
-        parse_comment(comment, filename)
     change_file_name(filename, cnt_result)
     return err, info, cnt_result
 

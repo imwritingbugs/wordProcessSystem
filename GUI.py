@@ -124,7 +124,7 @@ def confirm_check():
 
 root = Tk()
 path = StringVar()
-root.title("会议纪要自动评判系统v1.2")
+root.title("会议纪要自动评判系统v1.3")
 Label(root, text="目标路径:").grid(row=0, column=0)
 Entry(root, textvariable=path, width=50).grid(row=0, column=1)
 Button(root, text="文件路径选择", command=select_file_path).grid(row=0, column=2)
