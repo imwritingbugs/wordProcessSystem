@@ -378,8 +378,10 @@ def parse_comment(content_list, filename):
         # print(location_list, len(location_list))
         # print(content_list, len(content_list))
         for line in content_list:
-            title, brief = line.split("会议纪要")
-            brief = "会议纪要" + brief
+            # print(line)
+            title, brief = line.split("会议纪要：")
+            # print(title, brief)
+            brief = "会议纪要：" + brief
             # f.write(location_list[i] + '\n')
             f.write(title + "\n")
             f.write(brief + "\n\n")

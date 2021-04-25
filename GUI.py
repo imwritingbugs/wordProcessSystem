@@ -77,10 +77,14 @@ def confirm_check():
         # 统计整个文件夹中的总字数
         folder_total_num = 0
         file_list = []
+        doc_file_list = []
         files = os.listdir(dir_path)
         for file in files:
             if file.endswith(".docx") and "~$" not in file:
                 file_list.append(dir_path + '/' + file)
+            elif file.endswith(".doc") and "~$" not in file:
+                doc_file_list.append(dir_path + '/' + file)
+                # print(file)
         # print(file_list)
         if len(file_list) == 0:
             box.showerror(title="错误", message="文件夹中未检测到.docx文件")
@@ -110,11 +114,18 @@ def confirm_check():
                 # print("file_list", file_list, len(file_list))
                 # print("err_list", err_message_list, len(err_message_list))
                 fh = open(dir_path + "/group_error.txt", 'w', encoding="utf-8")
-                fh.write(f"整个文件夹中的docx文件总字数为：{folder_total_num}\n")
+                fh.write(f"整个文件夹中的docx文件总字数为：{folder_total_num}\n\n")
                 for i in range(len(file_list)):
                     # print(i)
                     fh.write(file_list[i] + "\n")
                     fh.write(err_message_list[i] + "\n\n")
+                #   填写文件夹中的doc文件
+                print(len(doc_file_list))
+                if len(doc_file_list) != 0:
+                    fh.write(f"共检测到{len(doc_file_list)}个doc文件，请修改格式为docx后再检测。doc文件如下：\n")
+                    for doc_file in doc_file_list:
+                        fh.write(doc_file + '\n')
+                    fh.write("\n\n")
             except IOError:
                 box.showerror(title="错误", message="错误信息文件打开失败")
             else:
@@ -124,7 +135,7 @@ def confirm_check():
 
 root = Tk()
 path = StringVar()
-root.title("会议纪要自动评判系统v1.3")
+root.title("会议纪要自动评判系统v1.4")
 Label(root, text="目标路径:").grid(row=0, column=0)
 Entry(root, textvariable=path, width=50).grid(row=0, column=1)
 Button(root, text="文件路径选择", command=select_file_path).grid(row=0, column=2)
